@@ -1,0 +1,95 @@
+---
+title: 'some nets!'
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_height: 6
+    fig_width: 8
+    highlight: pygments
+    theme: readable
+    toc: yes
+---
+#Intro
+OK, we did look at data, now load this shit up and will try to make NNet.
+
+
+Hello there! In this notebook I will look at popular HR dataset and will try to solve some problems and draw some graphs.
+
+#Prerequisites
+
+Libraries
+```{r libs, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(magrittr)
+library(reshape2)
+library(broom)
+library(mlr)
+library(keras)
+```
+
+Now load data, fix variables a bit:
+```{r data, message=FALSE, warning=FALSE}
+hr_data <- read.csv('../data/HR_comma_sep.csv')
+hr_data %<>% 
+  rename(department = sales, 
+         work_accident = Work_accident, 
+         average_monthly_hours = average_montly_hours,
+         time_spent_company = time_spend_company) %>%
+  mutate(promotion_last_5years = factor(promotion_last_5years, levels = c(1, 0), labels = c('Yes', 'No')),
+         left = factor(left, levels = c(1, 0), labels = c('Yes', 'No')),
+         work_accident = factor(work_accident, levels = c(1, 0), labels = c('Yes', 'No')))
+
+```
+
+#keRas
+
+So, now that we have Keras in R, we can do some serious shit here.
+This one for model structure
+```{r}
+net <- keras_model_sequential()
+net %<>% 
+  layer_dense(units = 10, activation = 'relu', input_shape = c(9)) %>%
+  layer_dropout(rate = .5) %>%
+  layer_dense(units = 5, activation = 'relu') %>%
+  layer_dropout(rate = .2) %>%
+  layer_dense(units = 1, activation = 'sigmoid')
+```
+
+Now compile model.
+```{r compile}
+net %<>% compile(loss = 'binary_crossentropy',
+                 optimizer = optimizer_adam(lr = .001),
+                 metrics = c('accuracy'))
+```
+
+And now we'll make data, and run model. Yay~
+
+```{r data training}
+sample <- sample(nrow(hr_data), .8*nrow(hr_data))
+d.train <- hr_data %>% 
+             mutate(work_accident = as.numeric(work_accident),
+                    left = as.integer(left),
+                    promotion_last_5years = as.numeric(promotion_last_5years),
+                    department = as.numeric(department),
+                    salary = as.numeric(salary)) %>% slice(sample)
+d.test <- hr_data %>% 
+             mutate(work_accident = as.numeric(work_accident),
+                    left = as.integer(left),
+                    promotion_last_5years = as.numeric(promotion_last_5years),
+                    department = as.numeric(department),
+                    salary = as.numeric(salary)) %>% slice(-sample)
+train.x <- d.train %>% select(-left)
+train.x %<>% t %>% matrix(ncol = 9)
+train.y <- matrix(t(d.train$left)) - 1
+```
+
+```{r fit, message=FALSE, warning=FALSE}
+history <- net %>% fit(train.x, train.y, epochs = 10, validation_split = .3)
+```
+
+```{r}
+plot(history) + theme_bw()
+```
+
+Well, not really gud, but could be worse and also, it's our 1st net! Yay!

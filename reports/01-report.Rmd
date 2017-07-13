@@ -1,0 +1,279 @@
+---
+title: 'human Resources'
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_height: 6
+    fig_width: 12
+    highlight: pygments
+    theme: readable
+    toc: yes
+---
+
+#Intro
+
+Hello there! In this notebook I will look at popular HR dataset and will try to solve some problems and draw some graphs.
+
+#Prerequisites
+
+Libraries
+```{r libs, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(magrittr)
+library(reshape2)
+library(corrplot)
+library(broom)
+library(scales)
+library(rpart.plot)
+library(rpart)
+library(knitr)
+library(kableExtra)
+```
+
+Now load data:
+```{r}
+hr_data <- read.csv('../data/HR_comma_sep.csv')
+```
+
+#EDA
+
+##Data types, missed values
+
+```{r typing+naming}
+glimpse(hr_data)
+```
+
+Hm... 'sales' column is looking to be a department, rename. Also, will format names a bit, and then will look at missed values.
+```{r rename}
+hr_data %<>% rename(department = sales, 
+                    work_accident = Work_accident, 
+                    average_monthly_hours = average_montly_hours,
+                    time_spent_company = time_spend_company)
+```
+
+```{r na}
+hr_data %>% 
+  sapply(function(x) sum(is.na(x))) %>% 
+  tidy %>%
+  kable(format = 'html', col.names = c('Variable', '№ of NA')) %>%
+  kable_styling(bootstrap_options = c('condensed', 'striped'), full_width = FALSE)
+```
+
+Good, no missed values. Little retyping, since 'left', 'work_accident' and 'promotion_last_5years' are factors.
+
+```{r factorize, message = FALSE, warning= FALSE}
+hr_data %<>% mutate(promotion_last_5years = factor(promotion_last_5years, levels = c(1, 0), labels = c('Yes', 'No')),
+                    left = factor(left, levels = c(1, 0), labels = c('Yes', 'No')),
+                    work_accident = factor(work_accident, levels = c(1, 0), labels = c('Yes', 'No')))
+```
+
+
+## Density plots
+
+First of all, summary:
+```{r sum}
+summary(hr_data)
+```
+
+Now, lets look at density plots for continuous values and discrete plots for discrete ones.
+
+```{r}
+
+```
+
+
+```{r densities, fig.height = 16}
+sat_level <- hr_data %>%
+  mutate(bin = cut(satisfaction_level, breaks = seq(0, 1, by = .1))) %>%
+  group_by(bin) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot() +
+    geom_bar(aes(x = bin, y = freq), stat = 'identity', fill = 'darkgreen') +
+    scale_y_continuous(breaks = seq(0, 1, by = .01)) +
+    labs(x = 'Satisfaction Level', y = 'Frequency') +
+    theme_bw() +
+    theme(panel.grid.major.y = element_line(color = 'grey', size = .1),
+          panel.grid.minor.y = element_blank())
+
+last_eval <- hr_data %>%
+  mutate(bin = cut(last_evaluation, breaks = seq(0, 1, by = .1))) %>%
+  group_by(bin) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot() +
+    geom_bar(aes(x = bin, y = freq), stat = 'identity', fill = 'darkgreen') +
+    scale_y_continuous(breaks = seq(0, 1, by = .01)) +
+    labs(x = 'Last Evaluation', y = 'Frequency') +
+    theme_bw() +
+    theme(panel.grid.major.y = element_line(color = 'grey', size = .1),
+          panel.grid.minor.y = element_blank())
+
+avg_hours <- hr_data %>%
+  mutate(bin = cut(average_monthly_hours, breaks = seq(0, 400, by = 20))) %>%
+  group_by(bin) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot() +
+    geom_bar(aes(x = bin, y = freq), stat = 'identity', fill = 'darkgreen') +
+    scale_y_continuous(breaks = seq(0, 1, by = .01)) +
+    labs(x = 'Avg Working Hours', y = 'Frequency') +
+    theme_bw() +
+    theme(panel.grid.major.y = element_line(color = 'grey', size = .1),
+          panel.grid.minor.y = element_blank())
+department <- hr_data %>%
+  group_by(department) %>%
+  count() %>%
+  ggplot() +
+    geom_bar(aes(x = reorder(department, -n), y = n), stat = 'identity', fill = 'darkgreen') +
+    labs(x = 'Time spent in company, years', y = 'N') +
+    scale_y_continuous(breaks = seq(0, 7000, by = 500)) +
+    theme_bw() + 
+    theme(panel.grid.major.y = element_line(color = 'grey', size = .1),
+          panel.grid.minor.y = element_blank())
+
+time_spent <- hr_data %>%
+  ggplot() +
+    geom_bar(aes(x = time_spent_company), stat = 'count', fill = 'darkgreen') +
+    scale_x_continuous(breaks = seq(min(hr_data$time_spent_company), max(hr_data$time_spent_company), by = 1)) +
+    labs(x = 'Time spent in company, years', y = 'N') +
+    scale_y_continuous(breaks = seq(0, 7000, by = 500)) +
+    theme_bw() + 
+    theme(panel.grid.major.y = element_line(color = 'grey', size = .1),
+          panel.grid.minor.y = element_blank())
+
+projects <- hr_data %>%
+  ggplot() +
+    geom_bar(aes(x = number_project), stat = 'count', fill = 'darkgreen') +
+    scale_x_continuous(breaks = seq(min(hr_data$number_project), max(hr_data$number_project), by = 1)) +
+    labs(x = '№ of projects', y = 'N') +
+    scale_y_continuous(breaks = seq(0, 5000, by = 500)) +
+    theme_bw() + 
+    theme(panel.grid.major.y = element_line(color = 'grey', size = .1),
+          panel.grid.minor.y = element_blank())
+
+layout <- rbind(c(1, 1),
+                c(2, 2),
+             c(3, 3),
+             c(4, 4),
+             c(5, 6))
+grid.arrange(grobs = list(sat_level, last_eval, avg_hours, department, time_spent, projects), layout_matrix = layout)
+```
+
+Cool! Now, our factor variables.
+
+```{r factors}
+accident <- hr_data %>% count(work_accident) %>% mutate(freq = n / sum(n)) %>%
+  ggplot() +
+  geom_bar(aes(x = work_accident, fill = work_accident, y = freq), stat = 'identity') +
+  scale_fill_manual(values = c('darkgreen', 'firebrick'), guide = FALSE) +
+  scale_y_continuous(breaks = seq(0, 1, by = .05), labels = percent) +
+  xlab('Had accident on work') +
+  theme_bw() + 
+  theme(panel.grid.major.y = element_line(size = .1, color = 'grey'),
+        panel.grid.major.x = element_blank())
+
+promo <- hr_data %>% count(promotion_last_5years) %>% mutate(freq = n / sum(n)) %>%
+  ggplot() +
+  geom_bar(aes(x = promotion_last_5years, fill = promotion_last_5years, y = freq), stat = 'identity') +
+  scale_fill_manual(values = c('darkgreen', 'firebrick'), guide = FALSE) +
+  scale_y_continuous(breaks = seq(0, 1, by = .05), labels = percent) +
+  xlab('Been promoted in last 5 years') +
+  theme_bw() + 
+  theme(panel.grid.major.y = element_line(size = .1, color = 'grey'),
+        panel.grid.major.x = element_blank())
+
+left <- hr_data %>% count(left) %>% mutate(freq = n / sum(n)) %>%
+  ggplot() +
+  geom_bar(aes(x = left, fill = left, y = freq), stat = 'identity') +
+  scale_fill_manual(values = c('darkgreen', 'firebrick'), guide = FALSE) +
+  scale_y_continuous(breaks = seq(0, 1, by = .05), labels = percent) +
+  xlab('Left job') +
+  theme_bw() + 
+  theme(panel.grid.major.y = element_line(size = .1, color = 'grey'),
+        panel.grid.major.x = element_blank())
+  
+layout <- rbind(c(1, 2, 3))
+grid.arrange(grobs = list(accident, promo, left), layout_matrix = layout)
+```
+
+So, very few been promoted, about quarter of people left their job.
+
+Ok, let's look at correlogram.
+```{r corrplot}
+hr_data %>% mutate(work_accident = as.numeric(work_accident),
+                   left = as.numeric(left),
+                   promotion_last_5years = as.numeric(promotion_last_5years),
+                   department = as.numeric(department),
+                   salary = as.numeric(salary)) %>% cor %>% corrplot(method = c('square'))
+```
+
+#Some sort of practical analysis
+
+So, why people leave? Let's figure out. In lazy way, we'll make decision tree model, look at it's internals, and then will build graphs. :)
+
+```{r trees}
+model <- rpart(left~., hr_data)
+rpart.plot(model)
+```
+
+So, main concern is satisfaction level. Let's see difference of distribution between left and stayed employees.
+
+
+```{r sat_left, fig.width=12}
+hr_data %>% 
+  select(left, satisfaction_level) %>%
+  mutate(bin = cut(satisfaction_level, breaks = seq(0, 1, by = .05), labels = FALSE) / 20) %>%
+  group_by(bin, left) %>%
+  count() %>%
+  ungroup() %>%
+  group_by(bin) %>%
+  mutate(freq = n / sum(n)) %>%
+  ggplot() +
+    geom_bar(aes(x = bin, y = freq, fill = left), stat = 'identity') +
+    scale_fill_manual(values = c('darkgreen', 'firebrick')) +
+    geom_vline(aes(xintercept = .46), color = 'white', linetype = 'dashed', size = 1) +
+    scale_color_manual(values = c('darkgreen', 'orangered')) +
+    guides(fill = guide_legend(title = 'Has left job?')) +
+    coord_cartesian(xlim = c(0, 1), ylim = c(0, 1)) +
+    labs(x = 'Satisfaction Level', y = 'Frequency') +
+    theme_bw() + 
+    scale_y_continuous(breaks = seq(0, 1, by = .05), labels = percent) +
+    theme(panel.grid.major.y = element_line(size = .1, color = 'grey'),
+          panel.grid.major.x = element_blank())
+```
+
+Dashed line is the boundary decision from a tree. Looks like we can locate 2 big groups with this decision boundary. One still left, so we go down right on the tree and check next 2 variables.
+
+```{r heatmap}
+hr_data %>% 
+  filter(satisfaction_level >= .46) %>% 
+  mutate(bin = ntile(last_evaluation, 10)/10) %>% 
+  group_by(bin, time_spent_company) %>% 
+  count(left) %>%
+  mutate(freq = n / sum(n)) %>%
+  filter(left == 'Yes') %>%
+  ggplot(aes(bin, time_spent_company)) +
+    geom_tile(aes(fill = freq)) +
+    coord_cartesian(xlim = c(0, 1), ylim = c(0, 6)) +
+    scale_y_continuous(breaks = seq(0, 6, by = 1)) +
+    scale_x_continuous(breaks = seq(0, 1, by = .1)) +
+    labs(x = 'Last evaluation', y = 'Time spent in company', fill = 'Frequency') +
+    scale_fill_gradient(low = 'white', high = 'darkgreen') +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+```
+
+Ok, another zone is localized, big possibility to leave is for men who worked for 5+ years and was highly productive by their last measures.
+Judging by decision tree, we can guess that you probably leave from your job if:
+
+-You're non-satisfied with your job and also not on high load.
+-You're on high load and really pissed off.
+-You just retire.
+
+Well, that's it for now. :)
